@@ -12,6 +12,8 @@ declare module 'vue-router' {
     crumb?: string[]
     /** 显式权限码；缺省用 route.path 匹配 */
     permission?: string
+    /** 占位页文案（PlaceholderView） */
+    placeholder?: { title?: string, description?: string }
   }
 }
 

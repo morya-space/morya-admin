@@ -65,13 +65,6 @@ const commands = computed<CommandMenuItem[]>(() => {
   return items
 })
 
-const defaultExpandedKeys = computed(() =>
-  menuModel.value
-    .filter(n => n.items?.length)
-    .map(n => n.key)
-    .filter((k): k is string => typeof k === 'string'),
-)
-
 function onSearchKey(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault()

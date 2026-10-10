@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Morya Admin</title>
+    <!--
+      GitHub Pages 对未命中文件返回此 404 页。
+      把原始路径存入 sessionStorage 并跳回应用入口，
+      由 index.html 里的脚本用 history.replaceState 还原路由。
+    -->
+    <script>
+      // 项目站点 base 固定为路径第一段（/<repo>/），把原始路径暂存后跳回应用入口
+      var base = '/' + (location.pathname.split('/')[1] || '') + '/'
+      sessionStorage.setItem('spa_redirect', location.pathname + location.search + location.hash)
+      location.replace(base)
+    </script>
+  </head>
+  <body></body>
+</html>

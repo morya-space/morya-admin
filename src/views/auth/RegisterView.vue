@@ -39,10 +39,17 @@ async function onSubmit() {
 
   submitting.value = true
   try {
-    await auth.register({
-      name: model.name,
+    // mock 注册：直接以新用户身份登录，与其他演示页一致
+    auth.signIn({
+      username: model.email,
+      nickname: model.name,
+      role: '超级管理员',
+      roleCode: 'admin',
+      permissions: [],
       email: model.email,
-      password: model.password,
+      dept: '',
+      location: '',
+      bio: '',
     })
     message.success('注册成功')
     await router.replace('/dashboard')
