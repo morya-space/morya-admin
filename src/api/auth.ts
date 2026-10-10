@@ -1,116 +1,76 @@
-import { delay } from '@/api/mock'
-import {
-  AuthError,
-  type AuthSession,
-  type AuthUser,
-  type LoginPayload,
-  type RegisterPayload,
-} from '@/types/auth'
+import type { AuthUser } from '../types'
+import { findRoleByCode, permissionsForRoleCode } from '../utils/permission'
+import { users } from './system'
 
-const USERS_KEY = 'morya-admin:mock-users'
-const SESSION_KEY = 'morya-admin:auth-session'
-
-interface StoredUser extends AuthUser {
-  password: string
+function delay(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
-const seedUsers: StoredUser[] = [
-  {
-    id: 'u-admin',
-    name: '模板管理员',
-    email: 'admin@morya.dev',
-    password: 'admin123',
-  },
-]
-
-function readUsers(): StoredUser[] {
-  const raw = localStorage.getItem(USERS_KEY)
-  if (!raw) {
-    localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers))
-    return [...seedUsers]
+function roleCodeForUsername(username: string): string {
+  const key = username.trim().toLowerCase()
+  if (key === 'admin')
+    return 'admin'
+  if (key === 'ops' || key === 'zhouran')
+    return 'ops'
+  if (key === 'wangwu')
+    return 'market'
+  if (key === 'zhaosi')
+    return 'finance'
+  const matched = users.find(u => u.username.toLowerCase() === key)
+  if (matched) {
+    const byName = findRoleByCode(
+      matched.role === '超级管理员'
+        ? 'admin'
+        : matched.role === '运营专员'
+          ? 'ops'
+          : matched.role === '市场经理'
+            ? 'market'
+            : matched.role === '财务专员'
+              ? 'finance'
+              : 'dev',
+    )
+    return byName?.code ?? 'dev'
   }
-  try {
-    const parsed = JSON.parse(raw) as StoredUser[]
-    return Array.isArray(parsed) && parsed.length ? parsed : [...seedUsers]
-  } catch {
-    return [...seedUsers]
-  }
+  return 'dev'
 }
 
-function writeUsers(users: StoredUser[]) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-}
+function buildAuthUser(username: string): AuthUser {
+  const roleCode = roleCodeForUsername(username)
+  const role = findRoleByCode(roleCode)
+  const seed = users.find(u => u.username.toLowerCase() === username.trim().toLowerCase())
 
-function toPublicUser(user: StoredUser): AuthUser {
-  return { id: user.id, name: user.name, email: user.email }
-}
-
-function createToken(userId: string): string {
-  return `mock.${userId}.${Date.now()}`
-}
-
-export function readStoredSession(): AuthSession | null {
-  const raw = localStorage.getItem(SESSION_KEY)
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as AuthSession
-  } catch {
-    return null
+  return {
+    username: seed?.username ?? username.trim(),
+    nickname: seed?.nickname ?? (roleCode === 'admin' ? 'Admin' : username.trim()),
+    role: role?.name ?? '研发工程师',
+    roleCode,
+    permissions: permissionsForRoleCode(roleCode),
+    email: seed?.email ?? `${username.trim()}@morya.dev`,
+    dept: seed?.dept ?? '前端开发部',
+    location: '武汉 · 中国',
+    bio: '这个人很懒，什么都没留下～ 专注于中后台前端解决方案。',
   }
 }
 
-export function clearStoredSession() {
-  localStorage.removeItem(SESSION_KEY)
+/** Mock 登录：任意非空账号密码均可通过；按用户名映射角色权限 */
+export async function loginApi(payload: { username: string, password: string }): Promise<AuthUser> {
+  await delay(600)
+  return buildAuthUser(payload.username)
 }
 
-function persistSession(session: AuthSession) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+/** Mock 解锁：任意非空密码均可解锁 */
+export async function unlockApi(_password: string): Promise<void> {
+  await delay(300)
 }
 
-export async function loginApi(payload: LoginPayload): Promise<AuthSession> {
-  await delay()
-  const email = payload.email.trim().toLowerCase()
-  const user = readUsers().find((item) => item.email.toLowerCase() === email)
-
-  if (!user || user.password !== payload.password) {
-    throw new AuthError('邮箱或密码不正确，请核对后重试。')
-  }
-
-  const session: AuthSession = {
-    token: createToken(user.id),
-    user: toPublicUser(user),
-  }
-  persistSession(session)
-  return session
-}
-
-export async function registerApi(payload: RegisterPayload): Promise<AuthSession> {
-  await delay()
-  const email = payload.email.trim().toLowerCase()
-  const name = payload.name.trim()
-  const users = readUsers()
-
-  if (users.some((item) => item.email.toLowerCase() === email)) {
-    throw new AuthError('该邮箱已注册，请直接登录或更换邮箱。')
-  }
-
-  const user: StoredUser = {
-    id: `u-${Date.now()}`,
-    name,
-    email,
-    password: payload.password,
-  }
-  writeUsers([...users, user])
-
-  const session: AuthSession = {
-    token: createToken(user.id),
-    user: toPublicUser(user),
-  }
-  persistSession(session)
-  return session
-}
-
+/** Mock 退出登录 */
 export async function logoutApi(): Promise<void> {
-  await delay(180)
-  clearStoredSession()
+  await delay(200)
+}
+
+/** Mock 忘记密码：发送重置邮件 */
+export async function forgotPasswordApi(email: string): Promise<void> {
+  await delay(500)
+  if (!email.trim())
+    throw new Error('email required')
 }

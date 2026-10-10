@@ -1,127 +1,376 @@
 <script setup lang="ts">
+import type { TimelineEvent } from 'morya-ui'
 import {
   MCard,
-  MEmpty,
+  MCheckbox,
   MGrid,
   MGridItem,
   MPageContent,
   MPageHeader,
-  MPagePlaceholder,
   MPageStat,
-  MStatus,
-  MTable,
+  MScrollbar,
   MTag,
-  type IconName,
+  MTimeline,
 } from 'morya-ui'
-import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import { computed, ref } from 'vue'
+import { activities, stats, todos, trafficSources, visitTrend } from '../../api/mock'
+import { useAuthStore } from '../../stores/auth'
 
-const auth = useAuthStore()
+const { nickname } = useAuthStore()
 
 const greeting = computed(() => {
-  const name = auth.user?.name ?? '同事'
-  return `你好，${name}`
+  const h = new Date().getHours()
+  if (h < 6)
+    return '夜深了'
+  if (h < 9)
+    return '早上好'
+  if (h < 12)
+    return '上午好'
+  if (h < 14)
+    return '中午好'
+  if (h < 18)
+    return '下午好'
+  return '晚上好'
 })
 
-const stats: Array<{
-  label: string
-  value: string
-  trend: string
-  trendSeverity?: 'primary' | 'secondary' | 'warn'
-  icon: IconName
-}> = [
-  { label: '模板模块', value: '3', trend: '已就绪', icon: 'layout-dashboard' },
-  { label: 'Mock 接口', value: '登录 / 注册', trend: '本地存储', trendSeverity: 'secondary', icon: 'database' },
-  { label: '待扩展列表', value: '用户', trend: '占位中', trendSeverity: 'warn', icon: 'users' },
-  { label: '设计契约', value: 'morya-ui', trend: 'Token 优先', icon: 'palette' },
-]
+const today = new Date()
+const week = ['日', '一', '二', '三', '四', '五', '六'][today.getDay()]
+const todayText = `${today.getFullYear()} 年 ${today.getMonth() + 1} 月 ${today.getDate()} 日 · 星期${week}`
 
-const recentColumns = [
-  { key: 'id', label: '编号', width: 96 },
-  { key: 'title', label: '事项' },
-  { key: 'area', label: '区域', width: 110 },
-  { key: 'status', label: '状态', width: 110 },
-]
+/* ---------- 访问趋势折线图（SVG） ---------- */
+const CHART_W = 640
+const CHART_H = 220
+const PAD = 12
 
-const recentRows = [
-  { id: 'T-01', title: '完善登录态与路由守卫', area: '账号', status: 'done' },
-  { id: 'T-02', title: '接入用户列表黄金样例', area: '用户', status: 'open' },
-  { id: 'T-03', title: '补齐系统设置表单页', area: '设置', status: 'progress' },
-]
-
-function areaSeverity(area: string) {
-  if (area === '账号') return 'info'
-  if (area === '用户') return 'warn'
-  return 'secondary'
+function buildPoints(key: 'visits' | 'visitors') {
+  const max = Math.max(...visitTrend.map(p => p[key]))
+  const stepX = (CHART_W - PAD * 2) / (visitTrend.length - 1)
+  return visitTrend.map((p, i) => {
+    const x = PAD + i * stepX
+    const y = CHART_H - PAD - (p[key] / max) * (CHART_H - PAD * 2)
+    return { x, y, ...p }
+  })
 }
 
-function statusLabel(status: string) {
-  if (status === 'open') return '待开始'
-  if (status === 'progress') return '进行中'
-  return '已完成'
+const visitPoints = buildPoints('visits')
+const visitorPoints = buildPoints('visitors')
+
+const visitLine = visitPoints.map(p => `${p.x},${p.y}`).join(' ')
+const visitorLine = visitorPoints.map(p => `${p.x},${p.y}`).join(' ')
+const visitArea = `${PAD},${CHART_H - PAD} ${visitLine} ${CHART_W - PAD},${CHART_H - PAD}`
+
+/* ---------- 流量来源甜甜圈 ---------- */
+const TONE_COLOR: Record<string, string> = {
+  primary: 'var(--m-color-primary)',
+  help: 'var(--m-color-help)',
+  info: 'var(--m-color-info)',
+  warning: 'var(--m-color-warning)',
 }
 
-function statusSeverity(status: string) {
-  if (status === 'open') return 'warn'
-  if (status === 'progress') return 'info'
-  return 'success'
+const donutStyle = computed(() => {
+  let acc = 0
+  const stops = trafficSources.map((s) => {
+    const from = acc
+    acc += s.percent
+    return `${TONE_COLOR[s.color]} ${from}% ${acc}%`
+  })
+  return { background: `conic-gradient(${stops.join(', ')})` }
+})
+
+/* ---------- 待办 ---------- */
+const todoList = ref(todos.map(t => ({ ...t })))
+const PRIORITY_TAG: Record<string, { label: string, type: 'danger' | 'warning' | 'success' }> = {
+  high: { label: '高', type: 'danger' },
+  mid: { label: '中', type: 'warning' },
+  low: { label: '低', type: 'success' },
 }
+
+/* ---------- 最近动态 ---------- */
+const timelineEvents: TimelineEvent[] = activities.map(a => ({
+  content: a.content,
+  date: a.time,
+  icon: a.icon,
+  type: a.type,
+}))
 </script>
 
 <template>
-  <MPageContent density="spacious">
-    <MPageHeader
-      :title="greeting"
-      description="这是登录后的工作台占位。KPI、趋势与待办仅用于演示布局，可按业务替换。"
-    />
+  <MScrollbar class="dashboard-scroll" aria-label="工作台内容">
+    <MPageContent density="spacious" aria-label="工作台">
+      <MPageHeader
+        :title="`${greeting}，${nickname}`"
+        :description="`${todayText}。关注访问、订单和待办。`"
+      />
 
-    <MGrid :cols="4" :x-gap="16" :y-gap="16" responsive="screen">
-      <MGridItem v-for="item in stats" :key="item.label" :span="1">
-        <MPageStat
-          :label="item.label"
-          :value="item.value"
-          :trend="item.trend"
-          :trend-severity="item.trendSeverity ?? 'primary'"
-          :icon="item.icon"
-        />
-      </MGridItem>
-    </MGrid>
-
-    <MGrid :cols="2" :x-gap="16" :y-gap="16" responsive="screen">
-      <MGridItem :span="1">
-        <MCard title="扩展建议">
-          <MPagePlaceholder
-            aria-label="图表占位"
-            description="下一步可接入图表，或用 get_golden_page(list-page) 生成用户列表。"
+      <MGrid :cols="4" :x-gap="16" :y-gap="16" responsive="screen">
+        <MGridItem v-for="s in stats" :key="s.label">
+          <MPageStat
+            :label="s.label"
+            :value="s.value"
+            :trend="`${s.up ? '+' : '-'}${s.trend}`"
+            :trend-direction="s.up ? 'up' : 'down'"
+            :trend-label="s.hint"
+            :trend-type="s.up ? 'success' : 'danger'"
+            :icon="s.icon"
+            shadow="always"
           />
-        </MCard>
-      </MGridItem>
-      <MGridItem :span="1">
-        <MCard title="模板待办">
-          <MTable
-            :columns="recentColumns"
-            :rows="recentRows"
-            size="small"
-            :paginator="false"
-            bordered
-            row-key="id"
-            aria-label="模板待办"
-          >
-            <template #cell-area="{ value }">
-              <MTag :value="String(value)" :severity="areaSeverity(String(value))" />
-            </template>
-            <template #cell-status="{ value }">
-              <MStatus
-                :label="statusLabel(String(value))"
-                :severity="statusSeverity(String(value))"
-              />
-            </template>
-            <template #empty>
-              <MEmpty title="暂无待办" description="接入真实数据后会显示在这里。" />
-            </template>
-          </MTable>
-        </MCard>
-      </MGridItem>
-    </MGrid>
-  </MPageContent>
+        </MGridItem>
+      </MGrid>
+
+      <!-- 趋势 + 流量 -->
+      <MGrid cols="1 l:2" :x-gap="16" :y-gap="16" responsive="screen">
+        <MGridItem>
+          <MCard class="page-card" title="访问趋势" subtitle="近 7 日访问量与访客数" bordered shadow="always">
+            <div class="chart" role="img" aria-label="近 7 日访问趋势折线图">
+              <svg :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
+                <polygon
+                  :points="visitArea"
+                  fill="var(--m-color-primary)"
+                  fill-opacity="0.08"
+                />
+                <polyline
+                  :points="visitLine"
+                  fill="none"
+                  stroke="var(--m-color-primary)"
+                  stroke-width="2.5"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+                <polyline
+                  :points="visitorLine"
+                  fill="none"
+                  stroke="var(--m-color-success)"
+                  stroke-width="2.5"
+                  stroke-dasharray="5 5"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+                <circle
+                  v-for="p in visitPoints"
+                  :key="`v-${p.date}`"
+                  :cx="p.x"
+                  :cy="p.y"
+                  r="3.5"
+                  fill="var(--m-color-surface)"
+                  stroke="var(--m-color-primary)"
+                  stroke-width="2"
+                />
+              </svg>
+            </div>
+            <div class="chart-meta">
+              <span v-for="p in visitTrend" :key="p.date" class="chart-meta__x">{{ p.date }}</span>
+            </div>
+            <div class="chart-legend">
+              <span><i class="dot dot--primary" />访问量</span>
+              <span><i class="dot dot--success" />访客数</span>
+            </div>
+          </MCard>
+        </MGridItem>
+
+        <MGridItem>
+          <MCard class="page-card" title="流量来源" subtitle="各渠道访问占比" bordered shadow="always">
+            <div class="traffic">
+              <div class="traffic__donut" :style="donutStyle" role="img" aria-label="流量来源占比图">
+                <div class="traffic__donut-hole">
+                  <b>100%</b>
+                  <span>总访问</span>
+                </div>
+              </div>
+              <ul class="traffic__legend">
+                <li v-for="s in trafficSources" :key="s.name">
+                  <i class="dot" :style="{ background: TONE_COLOR[s.color] }" />
+                  <span class="traffic__name">{{ s.name }}</span>
+                  <b>{{ s.percent }}%</b>
+                </li>
+              </ul>
+            </div>
+          </MCard>
+        </MGridItem>
+      </MGrid>
+
+      <!-- 待办 + 动态 -->
+      <MGrid cols="1 l:2" :x-gap="16" :y-gap="16" responsive="screen">
+        <MGridItem>
+          <MCard class="page-card" title="待办事项" :subtitle="`共 ${todoList.filter((t) => !t.done).length} 项未完成`" bordered shadow="always">
+            <ul class="todo">
+              <li v-for="t in todoList" :key="t.id" :class="{ 'todo--done': t.done }">
+                <MCheckbox v-model="t.done" :aria-label="`完成待办：${t.title}`" />
+                <span class="todo__title">{{ t.title }}</span>
+                <MTag
+                  :value="PRIORITY_TAG[t.priority].label"
+                  :type="PRIORITY_TAG[t.priority].type"
+                  size="small"
+                  rounded
+                />
+                <span class="todo__time">{{ t.time }}</span>
+              </li>
+            </ul>
+          </MCard>
+        </MGridItem>
+
+        <MGridItem>
+          <MCard class="page-card" title="最近动态" subtitle="系统与用户操作记录" bordered shadow="always">
+            <MTimeline :value="timelineEvents" />
+          </MCard>
+        </MGridItem>
+      </MGrid>
+    </MPageContent>
+  </MScrollbar>
 </template>
+
+<style scoped>
+.dashboard-scroll {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+/* ---------- 折线图 ---------- */
+.chart {
+  width: 100%;
+  aspect-ratio: 640 / 220;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-meta {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--m-space-1);
+  margin-top: var(--m-space-1);
+  color: var(--m-color-text-muted);
+  font-size: var(--m-font-size-xs);
+}
+
+.chart-legend {
+  display: flex;
+  gap: var(--m-space-5);
+  margin-top: var(--m-space-3);
+  color: var(--m-color-text-muted);
+  font-size: var(--m-font-size-xs);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--m-space-2);
+}
+
+.dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.dot--primary {
+  background: var(--m-color-primary);
+}
+
+.dot--success {
+  background: var(--m-color-success);
+}
+
+/* ---------- 流量来源 ---------- */
+.traffic {
+  display: flex;
+  align-items: center;
+  gap: var(--m-space-6);
+  flex-wrap: wrap;
+}
+
+.traffic__donut {
+  position: relative;
+  flex: none;
+  width: 9.5rem;
+  height: 9.5rem;
+  border-radius: 50%;
+}
+
+.traffic__donut-hole {
+  position: absolute;
+  inset: 22%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: var(--m-space-1);
+  border-radius: 50%;
+  background: var(--m-color-surface);
+}
+
+.traffic__donut-hole b {
+  font-size: var(--m-font-size-lg);
+}
+
+.traffic__donut-hole span {
+  font-size: var(--m-font-size-xs);
+  color: var(--m-color-text-muted);
+}
+
+.traffic__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 10rem;
+  display: grid;
+  gap: var(--m-space-3);
+}
+
+.traffic__legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--m-space-2);
+  font-size: var(--m-font-size-sm);
+}
+
+.traffic__name {
+  color: var(--m-color-text-muted);
+  flex: 1;
+}
+
+/* ---------- 待办 ---------- */
+.todo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.todo li {
+  display: flex;
+  align-items: center;
+  gap: var(--m-space-3);
+  padding: var(--m-space-3) 0;
+  border-bottom: 1px solid var(--m-color-border);
+}
+
+.todo li:last-child {
+  border-bottom: none;
+}
+
+.todo__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--m-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo__time {
+  flex: none;
+  font-size: var(--m-font-size-xs);
+  color: var(--m-color-text-muted);
+}
+
+.todo--done .todo__title {
+  color: var(--m-color-text-muted);
+  text-decoration: line-through;
+}
+</style>

@@ -10,11 +10,11 @@
       "@/*": ["./src/*"]
     },
 
+    "noFallthroughCasesInSwitch": true,
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "erasableSyntaxOnly": true
   },
 
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]

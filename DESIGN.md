@@ -7,7 +7,7 @@
 
 1. **组件优先**：交互与布局使用库内 `M*`，不手写等价 DOM。
 2. **令牌优先**：颜色、间距、圆角、阴影、动效使用 `--m-*`；禁止裸 `#hex` / `rgb()`（`scripts/check-raw-colors.mjs` 可扫描）。
-3. **语义一致**：主操作 `severity="primary"`；破坏性操作用 `severity="danger"` 或确认。
+3. **语义一致**：主操作 `type="primary"`；破坏性操作用 `danger` / `color="danger"` 或确认。Badge / Tag / Status / Alert 的语义色用 `type`。
 4. **可访问性**：控件有可访问名称；仅图标的按钮带 `aria-label`；浮层可键盘关闭。
 5. **单一事实源**：组件 API 以 MCP / 文档为准，禁止臆造 prop、event、slot。
 
@@ -31,6 +31,29 @@
 | 错误 | `--m-color-danger` |
 | 区块间距 | `--m-space-4` / `--m-space-6` |
 | 圆角 / 阴影 | `--m-radius-md` / `--m-shadow-md` |
+| 动效时长 | `--m-motion-fast/normal/enter/exit` |
+| 进出场位移 / 缓动 | `--m-motion-distance` / `--m-motion-ease` |
+
+动效强度用 `useMotion`（`data-m-motion`：`full` / `reduced` / `none`），不跟随系统 `prefers-reduced-motion`；进出场预设用 `motion.transitions` / 组件 `transition`（见文档站「动效」）。
+
+## 3.1 主题覆盖（品牌差异放这里）
+
+换品牌时**优先改主题变量**，不要在每个业务页写死色：
+
+```css
+/* 例如 src/styles/brand.css，在 styles.css 之后引入 */
+:root {
+  --m-color-primary: #0b6e4f; /* 仅主题入口允许；页面仍用 var(--m-*) */
+  --m-font-family: "Your Brand Sans", system-ui, sans-serif;
+}
+[data-theme="dark"] {
+  --m-color-primary: #3ecf8e;
+}
+```
+
+也可用 `createMoryaUI` / `MConfigProvider` 的主题 API（见文档「主题」）。`pnpm check:colors` 扫描业务源码中的裸 hex；主题入口文件可按项目约定排除。
+
+登录 / 落地页的「好看」用 MCP `get_style_shells` 的 token 壳（`account-split`、`express-hero` 等），签名仍映射到 `--m-*`。
 
 ## 4. 禁止项
 
@@ -42,13 +65,17 @@
 
 ## 5. AI 工作流
 
-1. 读本文，确认契约。
-2. 加载 `morya-ui-pages`，由 skill 选定表面与布局；可选 companion 只补充视觉或无障碍，冲突时本文 + skill + MCP 优先。
-3. 用 MCP 查真实 API 与样例后再写代码。
-4. 完成后可运行 `pnpm check:colors`（若已配置）。
+1. 读本文，确认契约与主题覆盖位置。
+2. 加载 `morya-ui-pages`，由 skill 选定表面与布局；有参考图/描述时先 MCP `map_reference`（或 `recommend_page` + `brief`）。
+3. 用 MCP 查真实 API 与片段后再写代码；签名壳用 `get_style_shells`。
+4. `validate_usage` + `validate_page`（同一 `brief`）；契约问题必须修，工艺建议可说明后放过。
+5. 可选：起本地页对照参考截首屏（见 skill review-checklist「截图自检」）。
+6. 完成后可运行 `pnpm check:colors`（若已配置）。
 
 ## 6. 相关资源
 
 - 包：`morya-ui` · 样式：`morya-ui/styles.css`
 - 页面配方：`.agents/skills/morya-ui-pages/`（及 setup 时勾选的 companion）
 - 主题 API：`useTheme` / `useDensity` / `useMotion`
+- 动效预设：`createMoryaUI({ motion })`、`componentDefaults.*.transition`、浮层 `transition` prop；详情见文档 `/docs/motion`
+- MCP：`map_reference` · `get_style_shells` · `recommend_page` · `validate_page`

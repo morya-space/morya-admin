@@ -2,6 +2,8 @@
 
 **Default rule:** operation feedback uses the `message` API. Use `toast` only when you need a title plus detail, or an async / background notification feel.
 
+Authoritative selection + key API notes also live in MCP / skill decision **`feedback-choice`** ([decision-recipes.md](./decision-recipes.md)). Keep this file and that decision aligned.
+
 ## Three different things
 
 | Name | Shape | API | Typical use |
@@ -47,7 +49,7 @@ toast.success({
 
 - Field validation: component `invalid` / `errorMessage` (preferred).
 - Form-level persistent errors (login/auth): token-styled `role="alert"` bar as in MCP `get_golden_page` `login-page`.
-- Note: `<MMessage>` today is primarily the **message service host** (`messages` / teleport). Do not invent a `severity` + default-slot Alert API unless docs add it.
+- Note: `<MMessage>` today is primarily the **message service host** (`messages` / teleport). Do not invent a `type` + default-slot Alert API unless docs add it.
 
 ```vue
 <p v-if="formError" class="form-alert" role="alert">{{ formError }}</p>

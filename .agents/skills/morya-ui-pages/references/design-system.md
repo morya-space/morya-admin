@@ -6,7 +6,7 @@ Canonical long form lives in project-root `DESIGN.md` when the AI config pack is
 
 1. **Components first** — layout, forms, tables, overlays use `M*` from `morya-ui`, not equivalent hand-rolled DOM.
 2. **Tokens first** — color, space, radius, shadow, motion via `--m-*`. No raw `#hex` / `rgb()` in page styles.
-3. **Semantic actions** — primary work uses `MButton severity="primary"`; destructive uses `severity="danger"` or confirm dialogs.
+3. **Semantic actions** — primary work uses `MButton type="primary"`; destructive uses `danger` / `color="danger"` or confirm dialogs. Badge / Tag / Status / Alert use semantic `type` for tone (not Button's appearance sugar `type`).
 4. **Accessibility** — fields have visible labels; icon buttons have `aria-label`; overlays dismiss with Esc (library default).
 5. **ConfigProvider** — wrap the app (or isolated demo) in `MConfigProvider` for locale, theme, density, overlay mount.
 
@@ -43,9 +43,9 @@ import 'morya-ui/styles.css'
 | Admin chrome | `MLayout fillViewport` + sider / header / content |
 | Sider nav | `MMenu` |
 | Page stack | `MPageContent` inside `MLayoutContent` |
-| Filters / toolbar | `MPageFilters` + `MPageToolbar` |
+| List chrome | `MPageHeader` + `MPageFilters` (+ optional batch `MPageToolbar`) |
 | Form surfaces | `MPageHeader` + `MPageSection variant="form|actions"` |
-| Dashboard KPI | `MPageStat` + `MPagePlaceholder` |
+| Dashboard KPI / chart pending | `MPageStat` + `MCard shadow="always"` + `MEmpty` |
 | Module cards | `MCard` / `MPanel` / `MFieldset` |
 | Grid / spacing | `MGrid` + `MGridItem`, or `MFlex` / `MSpace` |
 
@@ -59,6 +59,7 @@ import 'morya-ui/styles.css'
 ## Data display
 
 - `MTable` with `columns` + **`rows`** + `row-key` (default `id`). There is no `data` prop.
+- Height: only for **full-viewport admin lists** whose main job is one table, use `MPageContent fill` + `MTable fill paginator`. Skip `fill` for embedded/short/document-scroll tables — see [page-layouts.md](page-layouts.md) § List height.
 - Row status → `MStatus`; categories / closable labels → `MTag`.
 - Row actions: text/link `MButton` or `MDropdown` (avoid a row of filled buttons).
 - Pagination: table `paginator` or sibling `MPagination`.

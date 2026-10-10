@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { MConfigProvider, MMessage, zhCN } from 'morya-ui'
+import { MConfigProvider, zhCN } from 'morya-ui'
+import { useSettingsStore } from './stores/settings'
+
+const { density } = useSettingsStore()
 </script>
 
 <template>
-  <MConfigProvider :locale="zhCN">
+  <MConfigProvider :locale="zhCN" :density="density">
     <RouterView />
-    <MMessage />
   </MConfigProvider>
 </template>

@@ -1,159 +1,378 @@
 <script setup lang="ts">
+import type { CommandMenuItem, MenuItem } from 'morya-ui'
 import {
-  MAvatar,
   MBreadcrumb,
   MButton,
-  MDropdown,
+  MCard,
+  MCommandMenu,
+  MDivider,
+  MFlex,
+  MIcon,
   MLayout,
   MLayoutContent,
   MLayoutHeader,
   MLayoutSider,
   MMenu,
-  MSpace,
-  message,
-  type MenuItem,
+  MTag,
+  useTheme,
 } from 'morya-ui'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import LayoutSettingsDrawer from '../components/LayoutSettingsDrawer.vue'
+import NotifyPopover from '../components/NotifyPopover.vue'
+import UserMenuPopover from '../components/UserMenuPopover.vue'
+import { useAuthStore } from '../stores/auth'
+import { useSettingsStore } from '../stores/settings'
+import { useTabsStore } from '../stores/tabs'
+import { buildMenuModel } from '../utils/menu'
 
-const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+const { isDark, toggleTheme } = useTheme()
+const { tabs, active, close } = useTabsStore()
+const { permissions } = useAuthStore()
+const { showTabs, contentWidth } = useSettingsStore()
 
-const siderCollapsed = ref(false)
-const userMenuOpen = ref(false)
+const collapsed = ref(window.matchMedia('(max-width: 900px)').matches)
+const settingsOpen = ref(false)
 
-const menuModel: MenuItem[] = [
-  { key: 'dashboard', label: '工作台', icon: 'layout-dashboard', to: '/dashboard' },
-  { key: 'users', label: '用户管理', icon: 'users', to: '/users' },
-  { key: 'settings', label: '系统设置', icon: 'settings', to: '/settings' },
-]
+const menuModel = computed<MenuItem[]>(() => buildMenuModel(permissions.value))
 
-const selectedKey = computed(() =>
-  typeof route.meta.menuKey === 'string' ? route.meta.menuKey : 'dashboard',
+const selectedKey = computed(() => route.path)
+const commandOpen = ref(false)
+
+const commands = computed<CommandMenuItem[]>(() => {
+  const items: CommandMenuItem[] = []
+  const walk = (nodes: MenuItem[]) => {
+    for (const node of nodes) {
+      if (node.to && node.label) {
+        const to = node.to
+        items.push({
+          key: node.key,
+          label: node.label,
+          icon: node.icon,
+          command: () => {
+            commandOpen.value = false
+            void router.push(to)
+          },
+        })
+      }
+      if (node.items)
+        walk(node.items)
+    }
+  }
+  walk(menuModel.value)
+  return items
+})
+
+const defaultExpandedKeys = computed(() =>
+  menuModel.value
+    .filter(n => n.items?.length)
+    .map(n => n.key)
+    .filter((k): k is string => typeof k === 'string'),
 )
 
+function onSearchKey(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    commandOpen.value = true
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onSearchKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onSearchKey))
+
 const breadcrumbModel = computed(() => {
-  const title = typeof route.meta.title === 'string' ? route.meta.title : '工作台'
-  return [{ label: '首页', to: '/dashboard' }, { label: title }]
+  const crumb = route.meta.crumb ?? []
+  return crumb.map((label, index) => ({
+    label,
+    ...(index < crumb.length - 1 && label === '首页' ? { to: '/dashboard' } : {}),
+  }))
 })
 
-const userInitial = computed(() => {
-  const name = auth.user?.name?.trim()
-  return name ? name.slice(0, 1) : 'M'
-})
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen()
+  }
+  else {
+    void document.documentElement.requestFullscreen().catch(() => {})
+  }
+}
 
-const userMenuItems = [
-  { value: 'logout', label: '退出登录', icon: 'logout' },
-]
+function onTabChange(value: string) {
+  // 点击关闭按钮时 click 会冒泡到标签根元素，此时页签已被移除，跳过导航
+  if (!tabs.value.some(t => t.value === value))
+    return
+  if (value !== route.path)
+    void router.push(value)
+}
 
-async function onUserMenuSelect(item: { value?: string }) {
-  userMenuOpen.value = false
-  if (item.value !== 'logout') return
-
-  await auth.logout()
-  message.success('已退出登录')
-  await router.replace('/login')
+function onTabClose(value: string) {
+  const next = close(value)
+  if (next)
+    void router.push(next)
 }
 </script>
 
 <template>
-  <MLayout fill-viewport has-sider>
+  <MLayout has-sider fill-viewport>
     <MLayoutSider
-      v-model:collapsed="siderCollapsed"
+      v-model:collapsed="collapsed"
       bordered
-      show-trigger="arrow-circle"
+      :width="234"
+      :collapsed-width="64"
       collapse-mode="width"
-      :width="220"
-      :collapsed-width="72"
+      show-trigger="arrow-circle"
     >
-      <div class="sider-brand" :class="{ 'sider-brand--collapsed': siderCollapsed }">
-        <span class="sider-brand__mark" aria-hidden="true">M</span>
-        <span v-if="!siderCollapsed" class="sider-brand__text">Morya Admin</span>
+      <div class="brand">
+        <span class="brand__logo" aria-hidden="true"><MIcon name="bolt" size="sm" /></span>
+        <span v-if="!collapsed" class="brand__name">Morya Admin</span>
       </div>
+
       <MMenu
         :model="menuModel"
         :selected-key="selectedKey"
-        :collapsed="siderCollapsed"
-        :collapsed-width="72"
+        :collapsed="collapsed"
+        :collapsed-width="64"
         embedded
+        aria-label="主导航"
       />
     </MLayoutSider>
 
     <MLayout>
-      <MLayoutHeader
-        bordered
-        :padding="'var(--m-space-3) var(--m-space-6)'"
-        class="admin-header"
-      >
-        <MBreadcrumb :model="breadcrumbModel" />
-        <MSpace alignment="center" :size="12">
-          <span class="admin-header__user">{{ auth.user?.name }}</span>
-          <MDropdown
-            v-model="userMenuOpen"
-            :items="userMenuItems"
-            placement="bottom-end"
-            @select="onUserMenuSelect"
-          >
-            <template #trigger>
-              <MButton severity="secondary" text aria-label="打开账户菜单">
-                <MAvatar :label="userInitial" size="sm" shape="circle" />
-              </MButton>
-            </template>
-          </MDropdown>
-        </MSpace>
+      <MLayoutHeader bordered padding="0 var(--m-space-4)" class="topbar">
+        <MButton icon="menu" icon-only aria-label="折叠菜单" type="text" @click="collapsed = !collapsed" />
+
+        <MBreadcrumb :model="breadcrumbModel" class="topbar__crumb" />
+
+        <MFlex class="topbar__right gap-2" align="center">
+          <MButton class="topbar__search" icon="search" icon-only aria-label="搜索菜单" type="text" @click="commandOpen = true" />
+
+          <MButton :icon="isDark ? 'sun' : 'moon'" icon-only :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'" type="text" @click="toggleTheme" />
+          <MButton icon="settings" icon-only aria-label="布局设置" type="text" @click="settingsOpen = true" />
+          <MButton icon="maximize" icon-only aria-label="全屏" type="text" @click="toggleFullscreen" />
+
+          <NotifyPopover />
+          <MDivider layout="vertical" class="mr-0 ml-3" />
+          <UserMenuPopover />
+        </MFlex>
       </MLayoutHeader>
 
-      <MLayoutContent>
-        <RouterView />
+      <TransitionGroup
+        v-if="showTabs"
+        tag="div"
+        name="tab"
+        class="tabbar"
+        role="navigation"
+        aria-label="页面页签"
+      >
+        <MTag
+          v-for="t in tabs"
+          :key="t.value"
+          :value="t.label"
+          :icon="t.icon"
+          :type="t.value === active ? 'primary' : 'secondary'"
+          :closable="t.closable"
+          :bordered="t.value === active"
+          class="tabbar__tag"
+          :class="{ 'tabbar__tag--active': t.value === active }"
+          tabindex="0"
+          size="large"
+          role="link"
+          @click="onTabChange(t.value)"
+          @keydown.enter="onTabChange(t.value)"
+          @close="onTabClose(t.value)"
+        />
+      </TransitionGroup>
+
+      <MCommandMenu v-model="commandOpen" :model="commands" placeholder="搜索菜单、页面…" />
+      <LayoutSettingsDrawer v-model="settingsOpen" />
+
+      <MLayoutContent class="layout-content">
+        <div class="admin-canvas">
+          <MCard
+            class="content-shell page-card page-card--fill"
+            bordered
+            shadow="always"
+            aria-label="主内容"
+          >
+            <div
+              class="content-inner"
+              :class="{ 'content-inner--fixed': contentWidth === 'fixed' }"
+            >
+              <RouterView />
+            </div>
+          </MCard>
+        </div>
       </MLayoutContent>
     </MLayout>
   </MLayout>
 </template>
 
 <style scoped>
-.sider-brand {
+.brand {
   display: flex;
   align-items: center;
   gap: var(--m-space-3);
-  min-height: 3.5rem;
+  height: 3.75rem;
   padding: 0 var(--m-space-4);
-  border-bottom: 1px solid var(--m-color-border);
-}
-
-.sider-brand--collapsed {
-  justify-content: center;
-  padding: 0;
-}
-
-.sider-brand__mark {
-  display: inline-grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: var(--m-radius-md);
-  background: color-mix(in srgb, var(--m-color-primary) 16%, var(--m-color-surface));
-  color: var(--m-color-primary);
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.sider-brand__text {
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  overflow: hidden;
+  white-space: nowrap;
   color: var(--m-color-text);
 }
 
-.admin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--m-space-4);
+.brand__logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--m-radius-md);
+  color: var(--m-color-on-emphasis);
+  background: var(--m-color-primary);
 }
 
-.admin-header__user {
-  color: var(--m-color-text-muted);
-  font-size: 0.875rem;
+.brand__name {
+  font-size: var(--m-font-size-md);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--m-space-3);
+}
+
+.topbar__crumb {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar__right {
+  display: flex;
+}
+
+.topbar__search {
+  margin-right: var(--m-space-2);
+}
+
+.tabbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--m-space-2);
+  padding: var(--m-space-2) var(--m-space-4);
+  border-bottom: 1px solid var(--m-color-border);
+  background: var(--m-color-fill-lighter);
+  overflow-x: auto;
+}
+
+.tabbar__tag {
+  flex: none;
+  min-width: 4.5rem;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--m-motion-fast) var(--m-motion-ease),
+    box-shadow var(--m-motion-fast) var(--m-motion-ease);
+}
+
+.tabbar__tag:hover {
+  transform: translateY(-1px);
+}
+
+.tabbar__tag:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.tabbar__tag:focus-visible {
+  outline: 2px solid var(--m-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.tabbar__tag--active {
+  box-shadow: var(--m-shadow-sm);
+}
+
+/* 页签进出场 / 重排（TransitionGroup）——声明在 .tabbar__tag 之后，过渡期覆盖其 fast 过渡 */
+.tab-move,
+.tab-enter-active,
+.tab-leave-active {
+  transition:
+    transform var(--m-motion-normal) var(--m-motion-ease),
+    opacity var(--m-motion-normal) var(--m-motion-ease);
+}
+
+.tab-enter-from,
+.tab-leave-to {
+  opacity: 0;
+  transform: translateY(calc(var(--m-space-2) * 0.75)) scale(0.92);
+}
+
+.layout-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.admin-canvas {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: var(--m-space-4);
+  background: var(--m-color-fill-lighter);
+}
+
+.content-shell.page-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-shell.page-card > :deep(.m-card__body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* 仅主壳去 padding；工作台等内部 MCard 保留组件默认内边距 */
+  padding: 0;
+  overflow: hidden;
+}
+
+.content-inner {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  /* 无表格 fill / 自带 MScrollbar 的页：卡片内不原生滚动 */
+  overflow: auto;
+}
+
+.content-inner:has(.m-page-content--fill),
+.content-inner:has(.m-scrollbar) {
+  overflow: hidden;
+}
+
+.content-inner--fixed {
+  max-width: 75rem;
+  margin-inline: auto;
+}
+
+.content-inner :deep(.m-page-content--fill) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 字典等非直接 MTable 主区，同样吃掉剩余高度 */
+.content-inner :deep(.m-page-content--fill > .dict-split) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 </style>
